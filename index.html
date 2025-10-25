@@ -458,7 +458,8 @@
             
             // Garante que a ordenação seja do mais recente para o mais antigo (logTimestamp)
             workouts.sort((a, b) => {
-                return new Date(b.logTimestamp).getTime() - new Date(a.logTimestamp).getTime();
+                // Usa dateString para comparação de datas (que é o que o sistema usa)
+                return new Date(b.dateString).getTime() - new Date(a.dateString).getTime();
             });
             
             globalWorkoutsData = workouts;
@@ -542,6 +543,7 @@
         function formatDateTime(date) {
             const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit' };
             const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
+            // Adicionado um check para garantir que a data seja válida
             if (!(date instanceof Date) || isNaN(date.getTime())) {
                 return { date: 'Data Inválida', time: '' };
             }
@@ -551,13 +553,18 @@
             return { date: datePart, time: timePart };
         }
 
-        // --- LÓGICA DE CONFIGURAÇÃO DE TREINOS (Ajustada para LocalStorage) ---
+        // --- LÓGICA DE CONFIGURAÇÃO DE TREINOS (Ajustada para LocalStorage com Migração) ---
         
         /**
          * Manipulador de submissão do formulário de Configuração de Treinos.
+         * Corrigido o problema de dessincronização de metas/nomes.
          */
         customWorkoutsForm.addEventListener('submit', (e) => {
             e.preventDefault();
+            
+            const oldConfig = { ...customWorkoutsConfig }; // Guarda a config antiga para migração
+            const oldCycleGoals = loadData(LS_KEY_GOALS_CYCLE, {}); // Recarrega os objetivos para pegar o estado mais recente
+            const oldAnnualGoals = loadData(LS_KEY_GOALS_ANNUAL, {});
             
             const newConfig = {};
             let allValid = true;
@@ -585,20 +592,44 @@
                  return;
             }
 
+            // 1. ATUALIZAÇÃO E SALVAMENTO DA CONFIGURAÇÃO
             customWorkoutsConfig = newConfig;
             saveData(LS_KEY_CONFIG, customWorkoutsConfig);
             
-            // Re-renderiza tudo que depende da configuração
-            loadCycleGoals(); // Recarrega metas para pegar nomes atualizados
-            loadAnnualGoals(); // Recarrega metas para pegar nomes atualizados
+            // 2. LÓGICA DE MIGRAÇÃO: Atualiza as chaves das metas de ciclo e anuais com o novo nome
+            
+            const migratedCycleGoals = {};
+            const migratedAnnualGoals = {};
+
+            SLOT_KEYS.forEach(slotKey => {
+                const oldName = (oldConfig[slotKey] || DEFAULT_WORKOUT_CONFIG_MAP[slotKey]).name;
+                const newName = customWorkoutsConfig[slotKey].name;
+                
+                // Migra o valor da meta de ciclo do nome antigo para o novo nome
+                const cycleGoalValue = oldCycleGoals[oldName] !== undefined ? oldCycleGoals[oldName] : 0;
+                migratedCycleGoals[newName] = cycleGoalValue;
+
+                // Migra o valor da meta anual do nome antigo para o novo nome
+                const annualGoalValue = oldAnnualGoals[oldName] !== undefined ? oldAnnualGoals[oldName] : 0;
+                migratedAnnualGoals[newName] = annualGoalValue;
+            });
+            
+            // 3. ATUALIZAÇÃO E SALVAMENTO DAS METAS MIGRADA
+            currentGoals = migratedCycleGoals;
+            saveData(LS_KEY_GOALS_CYCLE, currentGoals);
+            
+            annualGoals = migratedAnnualGoals;
+            saveData(LS_KEY_GOALS_ANNUAL, annualGoals);
+
+            // 4. RE-RENDERIZAÇÃO DA UI
             renderActivityButtons();
             renderCycleGoalInputs();
             renderAnnualGoalInputs();
             
-            // Re-renderiza histórico e calendário com novos nomes/cores
+            // Re-renderiza histórico, calendário, estatísticas e próximo treino com novos nomes/cores/metas
             loadWorkoutsHistory();
 
-            showMessage('✅ Configuração de treinos salva com sucesso!');
+            showMessage('✅ Configuração de treinos salva e metas migradas com sucesso!');
         });
         
         /**
@@ -698,7 +729,7 @@
             saveData(LS_KEY_GOALS_CYCLE, currentGoals);
             
             renderCycleGoalInputs(); // Atualiza UI com novos valores
-            loadWorkoutsHistory(); // Atualiza a meta de ciclo na Agenda
+            loadWorkoutsHistory(); // Atualiza a meta de ciclo na Agenda e re-renderiza o calendário/próximo treino
 
             showMessage('✅ Metas de ciclo salvas com sucesso!');
         });
@@ -816,7 +847,8 @@
             
             // Cria um ID único baseado no timestamp atual
             const newId = Date.now().toString(); 
-            const workoutDate = new Date(selectedDateStr + 'T12:00:00'); 
+            // Usa 'T00:00:00' para evitar problemas com fuso horário ao salvar a data
+            const workoutDate = new Date(selectedDateStr + 'T00:00:00'); 
 
             const newWorkout = {
                 id: newId,
@@ -824,10 +856,10 @@
                 exercises: exercises,       
                 logTimestamp: new Date().toISOString(), 
                 workoutDate: workoutDate.toISOString(), // Salva como string ISO para consistência
-                dateString: selectedDateStr 
+                dateString: selectedDateStr // A chave mais importante para buscas e renderização de calendário
             };
 
-            globalWorkoutsData.push(newWorkout);
+            globalWorkoutsData.unshift(newWorkout); // Adiciona no início para manter a ordem decrescente
             saveData(LS_KEY_WORKOUTS, globalWorkoutsData);
 
             // Re-renderiza tudo que depende dos dados globais
@@ -863,14 +895,21 @@
             }
             emptyState.classList.add('hidden');
             
-            // Mostra apenas os 10 mais recentes
+            // Mostra apenas os 10 mais recentes (já ordenados por loadWorkoutsHistory)
             workouts.slice(0, 10).forEach(workout => {
-                const date = new Date(workout.dateString + 'T12:00:00'); 
+                // Adicionado 'T00:00:00' para garantir que new Date() funcione consistentemente
+                const date = new Date(workout.dateString + 'T00:00:00'); 
                 const indicator = getWorkoutIndicator(workout.activityName);
-                const color = indicator ? COLOR_MAP[indicator.slot.replace('slot', 'slot')] : COLOR_MAP['indigo'];
+                
+                // Busca a cor usando a config atual
+                const colorKey = indicator 
+                    ? (customWorkoutsConfig[indicator.slot] || DEFAULT_WORKOUT_CONFIG_MAP[indicator.slot]).colorKey 
+                    : 'indigo';
+                const color = COLOR_MAP[colorKey] || COLOR_MAP['indigo'];
 
                 const item = document.createElement('div');
                 item.className = 'bg-slate-700 p-4 rounded-xl flex justify-between items-center shadow-md border-l-4 border-indigo-400/80';
+                // Usa a cor base do tema para a borda
                 item.style.borderColor = color.text.replace('text-', '#');
 
                 item.innerHTML = `
@@ -896,33 +935,38 @@
             });
         }
         
-        // --- LÓGICA DE RECOMENDAÇÃO (INALTERADA) ---
+        // --- LÓGICA DE RECOMENDAÇÃO (Corrigido para usar a data real para ordenação) ---
         
         function getNextWorkout(workouts) {
             if (!workouts || workouts.length === 0) {
                 return { recommendation: (customWorkoutsConfig.slot1 || DEFAULT_WORKOUT_CONFIG_MAP.slot1).name, lastActivity: 'Nenhum', lastDate: 'Inicie o Ciclo' };
             }
 
+            // Pega os 3 primeiros slots (Treino A, B, C ou nomes customizados)
             const cycleNames = SLOT_KEYS.slice(0, 3).map(key => (customWorkoutsConfig[key] || DEFAULT_WORKOUT_CONFIG_MAP[key]).name);
 
-            const cycleWorkouts = workouts.filter(w => cycleNames.includes(w.activityName))
-                // Converta a string ISO de volta para Date para ordenar
+            const cycleWorkouts = workouts
+                // Filtra apenas treinos que estão nos 3 slots de ciclo
+                .filter(w => cycleNames.includes(w.activityName))
+                // Ordena pela data do treino (dateString)
                 .sort((a, b) => new Date(b.dateString).getTime() - new Date(a.dateString).getTime()); 
 
             if (cycleWorkouts.length === 0) {
-                 // Se houver treinos, mas nenhum no ciclo, pegue o mais recente para info
+                 // Se houver treinos, mas nenhum no ciclo principal (A, B, C)
                  const latestWorkout = [...workouts].sort((a, b) => new Date(b.dateString).getTime() - new Date(a.dateString).getTime())[0];
-                 return { recommendation: cycleNames[0], lastActivity: latestWorkout.activityName, lastDate: formatDateTime(new Date(latestWorkout.dateString)).date };
+                 return { recommendation: cycleNames[0], lastActivity: latestWorkout.activityName, lastDate: formatDateTime(new Date(latestWorkout.dateString + 'T00:00:00')).date };
             }
 
             const latestCycleWorkout = cycleWorkouts[0];
             
             const lastActivityName = latestCycleWorkout.activityName;
-            const lastDate = formatDateTime(new Date(latestCycleWorkout.dateString)).date;
+            // Garante que a data seja formatada corretamente
+            const lastDate = formatDateTime(new Date(latestCycleWorkout.dateString + 'T00:00:00')).date;
             
             let recommendation = cycleNames[0]; 
             const lastIndex = cycleNames.indexOf(lastActivityName);
             
+            // Lógica de rotação A -> B -> C -> A
             if (lastIndex !== -1) {
                 const nextIndex = (lastIndex + 1) % cycleNames.length;
                 recommendation = cycleNames[nextIndex];
@@ -947,13 +991,14 @@
         // --- LÓGICA DO CALENDÁRIO (INALTERADA) ---
 
         function getWorkoutIndicator(activityName) {
+            // Encontra o slotKey correspondente ao activityName atual
             const slot = SLOT_KEYS.find(key => (customWorkoutsConfig[key] || DEFAULT_WORKOUT_CONFIG_MAP[key]).name === activityName);
-            if (!slot) return null;
+            if (!slot) return null; // Retorna null se não encontrar (segurança)
             
             const config = customWorkoutsConfig[slot] || DEFAULT_WORKOUT_CONFIG_MAP[slot];
             const colorData = COLOR_MAP[config.colorKey] || COLOR_MAP['indigo'];
             
-            const isDot = SLOT_KEYS.indexOf(slot) < 3; 
+            const isDot = SLOT_KEYS.indexOf(slot) < 3; // Slots 1, 2, 3 usam ponto (ciclo principal)
 
             return { 
                 color: isDot ? colorData.progress : colorData.text.replace('text-', 'bg-'), 
@@ -966,6 +1011,7 @@
         function renderCalendar(allWorkouts) {
             if (!calendarGrid) return;
             
+            // Agrupa treinos por data
             const workoutMap = allWorkouts.reduce((acc, workout) => {
                 const dateKey = workout.dateString;
                 if (dateKey) {
@@ -1030,7 +1076,10 @@
                             if (indicatorData.isDot) {
                                 indicator.className = `w-2 h-2 rounded-full ${indicatorData.color}`;
                             } else {
-                                indicator.className = `text-xs leading-none`;
+                                // Usa a cor do texto para os emojis (não-ciclo)
+                                const colorKey = (customWorkoutsConfig[indicatorData.slot] || DEFAULT_WORKOUT_CONFIG_MAP[indicatorData.slot]).colorKey;
+                                const color = COLOR_MAP[colorKey] || COLOR_MAP['indigo'];
+                                indicator.className = `text-xs leading-none ${color.text}`;
                                 indicator.textContent = indicatorData.emoji;
                             }
                             indicatorDiv.appendChild(indicator);
@@ -1059,7 +1108,7 @@
             renderCalendar(globalWorkoutsData);
         });
 
-        // --- LÓGICA DE ESTATÍSTICAS (INALTERADA) ---
+        // --- LÓGICA DE ESTATÍSTICAS (Corrigido para garantir a chave correta no goals/config) ---
         
         function renderStats(workouts) {
             statsContainer.innerHTML = '';
@@ -1071,7 +1120,8 @@
             }
 
             const now = new Date();
-            const oneYearAgo = new Date(now.setFullYear(now.getFullYear() - 1)).toISOString().split('T')[0];
+            // Calcula a data de um ano atrás para filtrar
+            const oneYearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()).toISOString().split('T')[0];
             
             // 1. Filtrar treinos do último ano e contar
             const annualWorkouts = workouts.filter(w => w.dateString >= oneYearAgo);
@@ -1087,18 +1137,24 @@
 
             // 3. Renderizar Barras de Progresso
             const statsHtml = sortedCounts.map(([name, count]) => {
-                const totalGoal = annualGoals[name] || 0;
+                // Busca a meta ANUAL pela chave (name) - A migração garante que o nome esteja correto.
+                const totalGoal = annualGoals[name] || 0; 
                 const percentage = totalGoal > 0 ? Math.min(100, (count / totalGoal) * 100) : 0;
                 const displayPercentage = totalGoal > 0 ? `${percentage.toFixed(0)}%` : 'N/A';
                 
-                const slot = SLOT_KEYS.find(key => (customWorkoutsConfig[key] || DEFAULT_WORKOUT_CONFIG_MAP[key]).name === name);
-                const colorData = COLOR_MAP[(customWorkoutsConfig[slot] || DEFAULT_WORKOUT_CONFIG_MAP[slot]).colorKey] || COLOR_MAP['indigo'];
+                // Busca o slot para obter a cor correta, usando o nome atualizado
+                const indicator = getWorkoutIndicator(name);
+                const slot = indicator ? indicator.slot : SLOT_KEYS.find(key => DEFAULT_WORKOUT_CONFIG_MAP[key].name === name);
+                
+                const colorKey = slot ? (customWorkoutsConfig[slot] || DEFAULT_WORKOUT_CONFIG_MAP[slot]).colorKey : 'indigo';
+                const colorData = COLOR_MAP[colorKey] || COLOR_MAP['indigo'];
+                const emoji = slot ? (customWorkoutsConfig[slot] || DEFAULT_WORKOUT_CONFIG_MAP[slot]).emoji : '❓';
 
                 return `
                     <div class="space-y-1">
                         <div class="flex justify-between items-center text-sm font-medium">
                             <span class="${colorData.text} flex items-center">
-                                ${(customWorkoutsConfig[slot] || DEFAULT_WORKOUT_CONFIG_MAP[slot]).emoji} ${name}
+                                ${emoji} ${name}
                             </span>
                             <span class="text-gray-300">${count} / ${totalGoal}</span>
                         </div>
@@ -1112,7 +1168,7 @@
             statsContainer.innerHTML = statsHtml;
         }
 
-        // --- LÓGICA DO MODAL DE EXCLUSÃO (NOVO) ---
+        // --- LÓGICA DO MODAL DE EXCLUSÃO (INALTERADA) ---
         
         function showConfirmModal() {
             confirmModal.classList.add('open');
