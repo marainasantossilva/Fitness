@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Título na aba do navegador alterado para apenas "Treinos" -->
+    <title>Treinos</title>
+    <!-- Carregamento do Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Configuração da fonte Inter -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0F172A; /* Cor de fundo principal mais escura (slate-900) */
+            color: #E2E8F0; /* Texto Claro Padrão */
+        }
+        /* Estilo para a tab bar flutuante inferior */
+        #tabs-nav {
+            position: sticky;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 10;
+            backdrop-filter: blur(10px);
+            background-color: rgba(30, 41, 59, 0.9); /* slate-800 com transparência */
+            border-top: 1px solid #334155;
+            box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Estilos dos botões de atividade (Tappable) */
+        .activity-btn {
+            transition: all 0.2s ease-in-out;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            font-weight: 600;
+        }
+        .activity-btn:active {
+            transform: scale(0.98);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Estilos da Célula do Calendário */
+        .calendar-cell {
+            width: 100%;
+            height: 68px; /* Altura generosa para mobile */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            padding: 4px;
+            border-radius: 12px;
+            transition: background-color 0.2s;
+        }
+        #calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 4px;
+            text-align: center;
+        }
+        /* Destaque para o número do dia (top da célula) */
+        .day-number {
+            font-size: 0.875rem; /* text-sm */
+            font-weight: 600;
+        }
+        /* Destaque para o dia de hoje (AGORA ÍNDIGO NEON) */
+        .is-today {
+            background-color: #6366F1; /* indigo-500 */
+            color: white !important;
+            border-radius: 9999px; /* rounded-full */
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* Estilo do Modal (Adicionado para exclusão local) */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: none; /* Oculto por padrão */
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        .modal-overlay.open {
+            display: flex;
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen">
+
+    <div class="p-4 flex-grow max-w-lg mx-auto w-full pb-20">
+        <!-- Cabeçalho Principal (Alterado para apenas "Treinos") -->
+        <header class="mb-6 pt-2">
+            <div class="flex justify-between items-center">
+                <!-- Título ajustado para ser apenas "Treinos" -->
+                <h1 class="text-2xl font-extrabold text-white">🏋️ Treinos</h1>
+                <!-- Substituído o ID do Firebase pela mensagem de Modo Local -->
+                <span class="text-xs text-gray-400 p-2 bg-slate-800 rounded-lg">
+                    Modo Local: Dados salvos no navegador.
+                </span>
+            </div>
+            
+            <div id="loading" class="text-indigo-400 font-semibold mt-4 hidden text-center p-3 bg-slate-800 rounded-xl">
+                Carregando dados...
+            </div>
+        </header>
+        
+        <div id="message-box" class="hidden p-3 mb-4 text-sm rounded-xl font-medium text-center" role="alert"></div>
+    
+        <main class="space-y-6">
+            
+            <!-- Tab Content: CALENDÁRIO & STREAK (Main View) -->
+            <div id="calendar-content" class="tab-content space-y-6">
+                
+                <!-- Card de Destaque - Próximo Treino e Metas (BORDA NEON) -->
+                <section class="bg-slate-800 p-6 rounded-2xl shadow-xl border border-violet-700/50">
+                    <div id="next-workout-section" class="flex flex-col items-center">
+                        <h3 class="text-xl text-gray-300 font-bold mb-3">Sua Próxima Sessão</h3>
+                        <!-- Tamanho ajustado para text-4xl -->
+                        <p id="next-workout-display" class="text-4xl font-extrabold text-indigo-500 animate-pulse">...</p>
+                        <p id="last-workout-info" class="text-sm opacity-60 mt-2 text-gray-400">Carregando último registro...</p>
+                    </div>
+
+                    <div class="mt-5 pt-4 border-t border-slate-700/50 flex justify-between text-center">
+                        <div>
+                            <p class="text-sm text-gray-400">Meta Semanal (Ciclo)</p>
+                            <p class="text-2xl font-bold text-cyan-400"><span id="current-cycle-goal">0</span></p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-400">Meta Anual (Total)</p>
+                            <!-- O valor será atualizado via JS -->
+                            <p id="annual-goal-total-display" class="text-2xl font-bold text-fuchsia-400">...</p>
+                        </div>
+                    </div>
+                </section>
+                
+                <!-- Seção do Calendário -->
+                <section class="p-4 bg-slate-800 rounded-2xl shadow-lg">
+                    
+                    <div id="calendar-controls" class="flex justify-between items-center mb-4">
+                        <button id="prev-month" class="p-2 text-indigo-500 hover:text-indigo-400 transition duration-150 rounded-full bg-slate-700">
+                            <!-- SVG Left Arrow -->
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-6 h-6">
+                              <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                            </svg>
+                        </button>
+                        <span id="current-month-year" class="text-xl font-bold text-white">Outubro 2025</span>
+                        <button id="next-month" class="p-2 text-indigo-500 hover:text-indigo-400 transition duration-150 rounded-full bg-slate-700">
+                            <!-- SVG Right Arrow -->
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-6 h-6">
+                              <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <div id="calendar-grid">
+                        <!-- Cabeçalhos dos dias da semana (Dom, Seg...) e células do calendário -->
+                    </div>
+                </section>
+                
+            </div>
+            
+            <!-- Tab Content: ESTATÍSTICAS & HISTÓRICO (Reorganizado para destacar Metas Anuais) -->
+            <div id="stats-content" class="tab-content space-y-6 hidden">
+
+                <!-- Card de Metas e Total Anual -->
+                <section class="bg-slate-800 p-6 rounded-2xl shadow-xl">
+                    <h2 class="text-2xl font-bold mb-4 text-white border-b border-slate-700 pb-2">Resumo Anual</h2>
+                    
+                    <div class="flex justify-around text-center">
+                        <div>
+                            <p class="text-sm text-gray-400">Total Registrado (365 dias)</p>
+                            <p id="annual-count" class="text-5xl font-extrabold text-indigo-500 mt-1">0</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-400">Meta Anual</p>
+                            <!-- O valor será atualizado via JS -->
+                            <p id="annual-goal-total-stat" class="text-5xl font-extrabold text-fuchsia-400 mt-1">...</p>
+                        </div>
+                    </div>
+                </section>
+                
+                <!-- Seção de Distribuição de Exercícios (Estatísticas Detalhadas) -->
+                <section class="bg-slate-800 p-6 rounded-2xl shadow-xl">
+                    <h2 class="text-2xl font-bold mb-4 text-white border-b border-slate-700 pb-2">Distribuição de Exercícios</h2>
+                    <div id="stats-container" class="space-y-4">
+                        <p id="stats-loading" class="text-center text-gray-500 italic">Calculando estatísticas...</p>
+                        <!-- As estatísticas anuais detalhadas serão injetadas aqui -->
+                    </div>
+                </section>
+
+                <!-- Histórico de Treinos -->
+                <section class="bg-slate-800 p-6 rounded-2xl shadow-xl">
+                    <h2 class="text-2xl font-bold mb-4 text-white border-b border-slate-700 pb-2">Histórico Recente</h2>
+                    <div id="history-container" class="space-y-4">
+                        <p id="empty-state" class="text-center text-gray-500 italic hidden">Nenhum treino registrado ainda.</p>
+                        <!-- O histórico será injetado aqui pelo JavaScript -->
+                    </div>
+                </section>
+            </div>
+
+            <!-- Tab Content: EDITAR (Registro e Metas) -->
+            <div id="edit-content" class="tab-content space-y-6 hidden">
+
+                 <!-- Seção de Registro de Atividade (Botões Dinâmicos) -->
+                <section class="bg-slate-800 p-6 rounded-2xl shadow-xl">
+                    <h2 class="text-2xl font-bold mb-4 text-indigo-400">Adicionar Novo Treino</h2>
+                    
+                    <div class="mb-6">
+                        <label for="workout-date" class="block text-sm font-medium text-gray-400 mb-2">Selecione a Data:</label>
+                        <input type="date" id="workout-date" class="w-full bg-slate-700 border-slate-600 text-white rounded-xl p-3 text-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-150">
+                    </div>
+                    
+                    <!-- Botões de Treino Injetados Dinamicamente -->
+                    <div id="dynamic-activity-buttons" class="grid grid-cols-2 gap-4">
+                        <!-- Botões serão injetados aqui -->
+                    </div>
+                </section>
+                
+                <!-- Seção de Configuração de Tipos de Treino (NOVA SEÇÃO CRÍTICA) -->
+                <section class="bg-slate-800 p-6 rounded-2xl shadow-xl border border-indigo-700/50">
+                    <h2 class="text-2xl font-bold mb-4 text-indigo-400">Configurar Tipos de Treino</h2>
+                    <p class="text-sm text-gray-400 mb-4">Defina o nome, cor, emoji e exercícios (separe por vírgula) para até 5 tipos.</p>
+                    <form id="custom-workouts-form" class="space-y-6">
+                        <div id="custom-workouts-inputs" class="space-y-4">
+                            <!-- Inputs de Configuração serão injetados aqui -->
+                        </div>
+                        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition duration-150">
+                            Salvar Configuração de Treinos
+                        </button>
+                    </form>
+                </section>
+
+                 <!-- Seção de Metas Semanais -->
+                <section class="bg-slate-800 p-6 rounded-2xl shadow-xl">
+                    <h2 class="text-2xl font-bold mb-4 text-cyan-400">Ajustar Metas de Ciclo (Semanal)</h2>
+                    <p class="text-sm text-gray-400 mb-4">Frequência semanal desejada para cada tipo de treino.</p>
+                    <form id="cycle-goals-form" class="space-y-4">
+                        <div id="cycle-goals-inputs" class="grid grid-cols-2 gap-4">
+                            <!-- Inputs de Metas Semanais/Ciclo serão injetados aqui -->
+                        </div>
+                        <button type="submit" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 rounded-xl transition duration-150">
+                            Salvar Metas de Ciclo
+                        </button>
+                    </form>
+                </section>
+                
+                <!-- Seção de Metas Anuais (NOVA SEÇÃO) -->
+                <section class="bg-slate-800 p-6 rounded-2xl shadow-xl border border-fuchsia-700/50">
+                    <h2 class="text-2xl font-bold mb-4 text-fuchsia-400">Ajustar Metas Anuais</h2>
+                    <p class="text-sm text-gray-400 mb-4">Total de treinos desejado por tipo no ano.</p>
+                    <form id="annual-goals-form" class="space-y-4">
+                        <div id="annual-goals-inputs" class="grid grid-cols-2 gap-4">
+                            <!-- Inputs de Metas Anuais serão injetados aqui -->
+                        </div>
+                        <button type="submit" class="w-full bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-bold py-3 rounded-xl transition duration-150">
+                            Salvar Metas Anuais
+                        </button>
+                    </form>
+                </section>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- Barra de Navegação Flutuante Inferior -->
+    <nav id="tabs-nav" class="fixed bottom-0 w-full">
+        <div id="tabs" class="flex justify-around max-w-lg mx-auto p-2">
+            <!-- Cor ativa agora é indigo-400 -->
+            <button data-tab="calendar" class="tab-button active flex flex-col items-center p-3 text-indigo-400 font-semibold transition duration-200">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-7 h-7">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5m18 7.5v-7.5" />
+                </svg>
+                <span class="text-xs">Agenda</span>
+            </button>
+            <button data-tab="stats" class="tab-button flex flex-col items-center p-3 text-gray-400 font-semibold transition duration-200">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-7 h-7">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125l7.243-2.052a.75.75 0 01.554.047l5.594 2.8a.75.75 0 00.56.027l7.243-2.052a.75.75 0 01.554.047l5.594 2.8c.241.12.385.353.385.6v3.25A2.25 2.25 0 0118 20.25H6a2.25 2.25 0 01-2.25-2.25v-3.25c0-.247.144-.479.385-.6z" />
+                </svg>
+                <span class="text-xs">Progresso</span>
+            </button>
+            <button data-tab="edit" class="tab-button flex flex-col items-center p-3 text-gray-400 font-semibold transition duration-200">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-7 h-7">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span class="text-xs">Registro</span>
+            </button>
+        </div>
+    </nav>
+    
+    <!-- Modal de Confirmação (para exclusão local) -->
+    <div id="confirm-modal" class="modal-overlay">
+        <div class="bg-slate-800 p-6 rounded-xl shadow-2xl max-w-sm w-full space-y-4 border border-red-700/50">
+            <h3 class="text-xl font-bold text-red-500">Confirmar Exclusão</h3>
+            <p id="modal-text" class="text-gray-300">Você tem certeza que deseja excluir este registro? Esta ação é permanente no modo local.</p>
+            <div class="flex justify-end space-x-3">
+                <button id="cancel-delete" class="px-4 py-2 text-gray-400 rounded-lg hover:bg-slate-700 transition">Cancelar</button>
+                <button id="confirm-delete" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-xl transition">Excluir</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dependências e Lógica Local do App -->
+    <script>
+        // Variáveis de Estado Global (Antigas variáveis do Firebase/Firestore)
+        let currentGoals = {};          // Metas Semanais/Ciclo
+        let annualGoals = {};           // Metas Anuais
+        let customWorkoutsConfig = {};  // Configuração de nomes e exercícios
+        let globalWorkoutsData = [];    // Histórico de treinos
+        
+        let currentCalendarDate = new Date(); 
+        
+        // Constantes e IDs de LocalStorage
+        const LS_KEY_WORKOUTS = 'local_workouts';
+        const LS_KEY_CONFIG = 'local_config';
+        const LS_KEY_GOALS_CYCLE = 'local_goals_cycle';
+        const LS_KEY_GOALS_ANNUAL = 'local_goals_annual';
+
+        const SLOT_KEYS = ['slot1', 'slot2', 'slot3', 'slot4', 'slot5'];
+        const DEFAULT_WORKOUT_CONFIG_MAP = {
+            'slot1': { name: 'Treino A', colorKey: 'indigo', emoji: '🏋️', exercises: 'Agachamento, Supino, Remada' },
+            'slot2': { name: 'Treino B', colorKey: 'cyan', emoji: '💪', exercises: 'Levantamento Terra, Flexão, Barra' },
+            'slot3': { name: 'Treino C', colorKey: 'fuchsia', emoji: '🔥', exercises: 'Cadeira Extensora, Rosca Direta, Tríceps Corda' },
+            'slot4': { name: 'Yoga', colorKey: 'green', emoji: '🧘', exercises: 'Vinyasa, Saudação ao Sol, Postura da Árvore' },
+            'slot5': { name: 'Corrida', colorKey: 'violet', emoji: '🏃', exercises: '5k, 10k, Sprint' },
+        };
+        
+        const EMOJI_OPTIONS = [
+            '🏋️', '💪', '🏃', '🧘', '🤸', '🥊', '🏊', '🔥', '👟', '🎯', '🚴', '⛰️', '🏐', '💧', '🩹', '🏀', '⚽'
+        ];
+        
+        const MONTH_NAMES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+        const DAY_NAMES_SHORT = ["D", "S", "T", "Q", "Q", "S", "S"];
+        
+        const COLOR_MAP = {
+            'indigo': { base: 'bg-indigo-600', hover: 'hover:bg-indigo-700', shadow: 'shadow-indigo-900/50', text: 'text-indigo-400', progress: 'bg-indigo-500' },
+            'cyan': { base: 'bg-cyan-600', hover: 'hover:bg-cyan-700', shadow: 'shadow-cyan-900/50', text: 'text-cyan-400', progress: 'bg-cyan-500' },
+            'fuchsia': { base: 'bg-fuchsia-600', hover: 'hover:bg-fuchsia-700', shadow: 'shadow-fuchsia-900/50', text: 'text-fuchsia-400', progress: 'bg-fuchsia-500' },
+            'green': { base: 'bg-green-600', hover: 'hover:bg-green-700', shadow: 'shadow-green-900/50', text: 'text-green-400', progress: 'bg-green-500' },
+            'violet': { base: 'bg-violet-600', hover: 'hover:bg-violet-700', shadow: 'shadow-violet-900/50', text: 'text-violet-400', progress: 'bg-violet-500' },
+        };
+
+        // Elementos DOM
+        const historyContainer = document.getElementById('history-container');
+        const emptyState = document.getElementById('empty-state');
+        const messageBox = document.getElementById('message-box');
+        const loadingElement = document.getElementById('loading');
+        
+        const cycleGoalsForm = document.getElementById('cycle-goals-form');
+        const cycleGoalsInputsContainer = document.getElementById('cycle-goals-inputs');
+        const annualGoalsForm = document.getElementById('annual-goals-form'); 
+        const annualGoalsInputsContainer = document.getElementById('annual-goals-inputs'); 
+        const customWorkoutsForm = document.getElementById('custom-workouts-form'); 
+        const customWorkoutsInputsContainer = document.getElementById('custom-workouts-inputs'); 
+        const dynamicActivityButtons = document.getElementById('dynamic-activity-buttons'); 
+        
+        const statsContainer = document.getElementById('stats-container');
+        const annualCountSpan = document.getElementById('annual-count');
+        const annualGoalTotalDisplay = document.getElementById('annual-goal-total-display'); 
+        const annualGoalTotalStat = document.getElementById('annual-goal-total-stat'); 
+
+        const dateInput = document.getElementById('workout-date');
+        const calendarGrid = document.getElementById('calendar-grid');
+        const prevMonthButton = document.getElementById('prev-month');
+        const nextMonthButton = document.getElementById('next-month');
+        const currentMonthYearSpan = document.getElementById('current-month-year');
+        
+        const nextWorkoutDisplay = document.getElementById('next-workout-display');
+        const lastWorkoutInfo = document.getElementById('last-workout-info');
+        
+        const tabButtons = document.querySelectorAll('#tabs button');
+        const tabContents = document.querySelectorAll('.tab-content');
+        const currentCycleGoalSpan = document.getElementById('current-cycle-goal');
+
+        let exerciseToDeleteId = null; // Para o modal de exclusão
+        const confirmModal = document.getElementById('confirm-modal');
+        const confirmDeleteBtn = document.getElementById('confirm-delete');
+        const cancelDeleteBtn = document.getElementById('cancel-delete');
+        
+        // --- FUNÇÕES DE ARMAZENAMENTO LOCAL (LOCALSTORAGE) ---
+
+        /**
+         * Carrega dados do localStorage para uma chave específica.
+         */
+        function loadData(key, defaultValue) {
+            try {
+                const data = localStorage.getItem(key);
+                if (data) {
+                    return JSON.parse(data);
+                }
+            } catch (error) {
+                console.error(`Erro ao carregar ${key} do localStorage:`, error);
+            }
+            return defaultValue;
+        }
+
+        /**
+         * Salva dados no localStorage para uma chave específica.
+         */
+        function saveData(key, data) {
+            try {
+                localStorage.setItem(key, JSON.stringify(data));
+            } catch (error) {
+                console.error(`Erro ao salvar ${key} no localStorage:`, error);
+                showMessage('❌ Erro de armazenamento. Seu navegador pode estar cheio.', 'error');
+            }
+        }
+        
+        // --- FUNÇÕES DE CARREGAMENTO DE ESTADO (Substituem os Listeners do Firestore) ---
+        
+        function loadCustomWorkoutsConfig() {
+            let config = loadData(LS_KEY_CONFIG, null);
+            let needsSave = false;
+
+            if (!config || Object.keys(config).length === 0) {
+                config = DEFAULT_WORKOUT_CONFIG_MAP;
+                needsSave = true;
+            } else {
+                // Garante que todos os slots existam com defaults se faltar
+                SLOT_KEYS.forEach(key => {
+                    if (!config[key]) {
+                        config[key] = DEFAULT_WORKOUT_CONFIG_MAP[key];
+                        needsSave = true;
+                    }
+                });
+            }
+            
+            customWorkoutsConfig = config;
+            if (needsSave) {
+                saveData(LS_KEY_CONFIG, customWorkoutsConfig);
+            }
+        }
+
+        function loadCycleGoals() {
+            currentGoals = loadData(LS_KEY_GOALS_CYCLE, {});
+        }
+
+        function loadAnnualGoals() {
+             // Define defaults se não houver dados, usando os nomes customizados
+            const defaultAnnual = {};
+            SLOT_KEYS.forEach(key => {
+                 const name = (customWorkoutsConfig[key] || DEFAULT_WORKOUT_CONFIG_MAP[key]).name;
+                 defaultAnnual[name] = ['Treino A', 'Treino B', 'Treino C'].includes(DEFAULT_WORKOUT_CONFIG_MAP[key].name) ? 48 : 0;
+            });
+
+            annualGoals = loadData(LS_KEY_GOALS_ANNUAL, defaultAnnual);
+        }
+
+        function loadWorkoutsHistory() {
+            // Carrega e ordena a lista de treinos
+            const workouts = loadData(LS_KEY_WORKOUTS, []);
+            
+            // Garante que a ordenação seja do mais recente para o mais antigo (logTimestamp)
+            workouts.sort((a, b) => {
+                return new Date(b.logTimestamp).getTime() - new Date(a.logTimestamp).getTime();
+            });
+            
+            globalWorkoutsData = workouts;
+            
+            // Renderiza tudo que depende dos dados globais
+            renderHistory(globalWorkoutsData);
+            renderStats(globalWorkoutsData);
+            renderCalendar(globalWorkoutsData);
+            renderNextWorkout(globalWorkoutsData);
+        }
+        
+        // --- FUNÇÃO PRINCIPAL DE INICIALIZAÇÃO LOCAL (Substitui initializeFirebase) ---
+
+        function initLocalApp() {
+            loadingElement.classList.add('hidden');
+            
+            // 1. Carrega todas as configurações e metas primeiro
+            loadCustomWorkoutsConfig();
+            loadCycleGoals();
+            loadAnnualGoals();
+            
+            // 2. Renderiza os inputs de configuração (dependem da configuração customizada)
+            renderCustomWorkoutsInputs();
+            renderCycleGoalInputs();
+            renderAnnualGoalInputs();
+            renderActivityButtons();
+
+            // 3. Carrega e renderiza o histórico (que depende de todas as configurações)
+            loadWorkoutsHistory();
+            
+            // 4. Configuração inicial da data para hoje
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            dateInput.value = `${yyyy}-${mm}-${dd}`;
+        }
+        
+        // --- LÓGICA DE ABAS (INALTERADA) ---
+        
+        tabButtons.forEach(button => {
+            button.addEventListener('click', (e) => {
+                const targetTab = e.currentTarget.getAttribute('data-tab');
+                
+                tabButtons.forEach(btn => {
+                    btn.classList.remove('active', 'text-indigo-400');
+                    btn.classList.add('text-gray-400');
+                });
+                tabContents.forEach(content => content.classList.add('hidden'));
+                
+                e.currentTarget.classList.add('active', 'text-indigo-400');
+                e.currentTarget.classList.remove('text-gray-400');
+                document.getElementById(`${targetTab}-content`).classList.remove('hidden');
+
+                if (targetTab === 'calendar') {
+                    renderCalendar(globalWorkoutsData);
+                }
+                if (targetTab === 'stats') {
+                    renderStats(globalWorkoutsData);
+                }
+            });
+        });
+
+        // --- FEEDBACK E UTILITÁRIOS (INALTERADOS) ---
+        
+        function showMessage(message, type = 'success') {
+            messageBox.textContent = message;
+            messageBox.classList.remove('hidden', 'bg-green-800', 'text-white', 'bg-red-800');
+            
+            if (type === 'success') {
+                messageBox.classList.add('bg-green-800', 'text-white');
+            } else if (type === 'error') {
+                messageBox.classList.add('bg-red-800', 'text-white');
+            }
+
+            setTimeout(() => {
+                messageBox.classList.add('hidden');
+            }, 3000);
+        }
+
+        function formatDateTime(date) {
+            const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit' };
+            const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
+            if (!(date instanceof Date) || isNaN(date.getTime())) {
+                return { date: 'Data Inválida', time: '' };
+            }
+
+            const datePart = date.toLocaleDateString('pt-BR', dateOptions);
+            const timePart = date.toLocaleTimeString('pt-BR', timeOptions);
+            return { date: datePart, time: timePart };
+        }
+
+        // --- LÓGICA DE CONFIGURAÇÃO DE TREINOS (Ajustada para LocalStorage) ---
+        
+        /**
+         * Manipulador de submissão do formulário de Configuração de Treinos.
+         */
+        customWorkoutsForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            const newConfig = {};
+            let allValid = true;
+            
+            SLOT_KEYS.forEach(slotKey => {
+                const nameInput = e.target.elements[`${slotKey}_name`].value.trim();
+                const colorInput = e.target.elements[`${slotKey}_color`].value;
+                const emojiInput = e.target.elements[`${slotKey}_emoji`].value;
+                const exercisesInput = e.target.elements[`${slotKey}_exercises`].value.trim();
+                
+                if (!nameInput || !emojiInput) {
+                    allValid = false;
+                }
+                
+                newConfig[slotKey] = {
+                    name: nameInput,
+                    colorKey: colorInput,
+                    emoji: emojiInput,
+                    exercises: exercisesInput,
+                };
+            });
+
+            if (!allValid) {
+                 showMessage('❌ Todos os campos (Nome e Emoji) devem ser preenchidos.', 'error');
+                 return;
+            }
+
+            customWorkoutsConfig = newConfig;
+            saveData(LS_KEY_CONFIG, customWorkoutsConfig);
+            
+            // Re-renderiza tudo que depende da configuração
+            loadCycleGoals(); // Recarrega metas para pegar nomes atualizados
+            loadAnnualGoals(); // Recarrega metas para pegar nomes atualizados
+            renderActivityButtons();
+            renderCycleGoalInputs();
+            renderAnnualGoalInputs();
+            
+            // Re-renderiza histórico e calendário com novos nomes/cores
+            loadWorkoutsHistory();
+
+            showMessage('✅ Configuração de treinos salva com sucesso!');
+        });
+        
+        /**
+         * Renderiza os campos de entrada para a configuração de treinos.
+         */
+        function renderCustomWorkoutsInputs() {
+            customWorkoutsInputsContainer.innerHTML = '';
+            
+            SLOT_KEYS.forEach(slotKey => {
+                const config = customWorkoutsConfig[slotKey] || DEFAULT_WORKOUT_CONFIG_MAP[slotKey];
+                
+                const colorOptions = Object.keys(COLOR_MAP).map(color => `
+                    <option value="${color}" class="${COLOR_MAP[color].base.replace('bg-', 'text-')}" ${config.colorKey === color ? 'selected' : ''}>
+                        ${color.charAt(0).toUpperCase() + color.slice(1)}
+                    </option>
+                `).join('');
+                
+                const emojiOptions = EMOJI_OPTIONS.map(emoji => `
+                    <option value="${emoji}" ${config.emoji === emoji ? 'selected' : ''}>
+                        ${emoji}
+                    </option>
+                `).join('');
+                
+                const inputWrapper = document.createElement('div');
+                inputWrapper.className = 'p-4 rounded-xl border border-slate-700 space-y-3';
+                inputWrapper.innerHTML = `
+                    <h3 class="font-bold text-lg text-indigo-300">Slot ${SLOT_KEYS.indexOf(slotKey) + 1}</h3>
+                    
+                    <label class="block text-sm font-medium text-gray-400 mb-1">Nome do Treino</label>
+                    <input type="text" name="${slotKey}_name" value="${config.name}" required
+                           class="w-full bg-slate-700 border-slate-600 text-white rounded-lg p-2 focus:ring-indigo-500 focus:border-indigo-500">
+                    
+                    <label class="block text-sm font-medium text-gray-400 mb-1">Cor</label>
+                    <select name="${slotKey}_color" class="w-full bg-slate-700 border-slate-600 text-white rounded-lg p-2 focus:ring-indigo-500 focus:border-indigo-500">
+                        ${colorOptions}
+                    </select>
+
+                    <label class="block text-sm font-medium text-gray-400 mb-1">Emoji</label>
+                    <select name="${slotKey}_emoji" required
+                            class="w-full bg-slate-700 border-slate-600 text-white rounded-lg p-2 text-2xl text-center focus:ring-indigo-500 focus:border-indigo-500 appearance-none">
+                        ${emojiOptions}
+                    </select>
+                    
+                    <label class="block text-sm font-medium text-gray-400 mb-1">Lista de Exercícios (Separe por vírgula)</label>
+                    <textarea name="${slotKey}_exercises" rows="2"
+                              class="w-full bg-slate-700 border-slate-600 text-white rounded-lg p-2 focus:ring-indigo-500 focus:border-indigo-500">${config.exercises}</textarea>
+                `;
+                customWorkoutsInputsContainer.appendChild(inputWrapper);
+            });
+        }
+        
+        /**
+         * Renderiza os botões de registro de atividade dinamicamente.
+         */
+        function renderActivityButtons() {
+            dynamicActivityButtons.innerHTML = '';
+            
+            SLOT_KEYS.forEach((slotKey, index) => {
+                const config = customWorkoutsConfig[slotKey] || DEFAULT_WORKOUT_CONFIG_MAP[slotKey];
+                const colorData = COLOR_MAP[config.colorKey] || COLOR_MAP['indigo'];
+                
+                const isTwoColumn = (index === SLOT_KEYS.length - 1 && SLOT_KEYS.length % 2 !== 0) ? 'col-span-2' : '';
+
+                const button = document.createElement('button');
+                button.setAttribute('data-slot-key', slotKey);
+                button.setAttribute('data-activity-name', config.name);
+                button.className = `activity-btn ${colorData.base} ${colorData.hover} text-white py-4 rounded-xl ${colorData.shadow} ${isTwoColumn}`;
+                button.innerHTML = `${config.emoji} ${config.name}`;
+                
+                button.addEventListener('click', () => {
+                    logWorkoutLocal(config.name, config.exercises);
+                });
+                
+                dynamicActivityButtons.appendChild(button);
+            });
+        }
+
+
+        // --- LÓGICA DE METAS SEMANAIS/CICLO (Ajustada para LocalStorage) ---
+
+        /**
+         * Manipulador de submissão do formulário de Metas de Ciclo.
+         */
+        cycleGoalsForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            const newGoals = {};
+            const activityNames = SLOT_KEYS.map(key => (customWorkoutsConfig[key] || DEFAULT_WORKOUT_CONFIG_MAP[key]).name);
+            
+            activityNames.forEach(activityName => {
+                const inputElement = e.target.elements[activityName];
+                const value = parseInt(inputElement.value) || 0;
+                newGoals[activityName] = Math.max(0, value); // Garante que seja no mínimo 0
+            });
+
+            currentGoals = newGoals;
+            saveData(LS_KEY_GOALS_CYCLE, currentGoals);
+            
+            renderCycleGoalInputs(); // Atualiza UI com novos valores
+            loadWorkoutsHistory(); // Atualiza a meta de ciclo na Agenda
+
+            showMessage('✅ Metas de ciclo salvas com sucesso!');
+        });
+        
+        /**
+         * Renderiza os campos de entrada para as metas semanais/ciclo.
+         */
+        function renderCycleGoalInputs() {
+            cycleGoalsInputsContainer.innerHTML = '';
+            
+            // Usa os nomes customizados
+            const activityNames = SLOT_KEYS.map(key => (customWorkoutsConfig[key] || DEFAULT_WORKOUT_CONFIG_MAP[key]).name);
+            
+            activityNames.forEach(activityName => {
+                const goal = currentGoals[activityName] || 0;
+                const inputWrapper = document.createElement('div');
+                inputWrapper.className = 'flex flex-col';
+                inputWrapper.innerHTML = `
+                    <label for="cycle-goal-${activityName.replace(/\s/g, '-')}" class="text-sm font-medium text-gray-400 mb-1">${activityName}</label>
+                    <input type="number" id="cycle-goal-${activityName.replace(/\s/g, '-')}" name="${activityName}" value="${goal}" min="0" 
+                           class="w-full bg-slate-700 border-slate-600 text-white rounded-xl p-3 text-lg focus:ring-cyan-500 focus:border-cyan-500 transition duration-150" required>
+                `;
+                cycleGoalsInputsContainer.appendChild(inputWrapper);
+            });
+            
+             // Atualiza a meta de ciclo (apenas treinos de força para simplificar o display na Agenda)
+            const strengthNames = SLOT_KEYS
+                .filter(key => ['Treino A', 'Treino B', 'Treino C'].includes(DEFAULT_WORKOUT_CONFIG_MAP[key].name)) 
+                .map(key => (customWorkoutsConfig[key] || DEFAULT_WORKOUT_CONFIG_MAP[key]).name); 
+                
+            const totalCycleGoals = strengthNames.reduce((sum, name) => sum + (currentGoals[name] || 0), 0);
+            
+            currentCycleGoalSpan.textContent = totalCycleGoals;
+        }
+
+        
+        // --- LÓGICA DE METAS ANUAIS (Ajustada para LocalStorage) ---
+        
+        /**
+         * Manipulador de submissão do formulário de Metas Anuais.
+         */
+        annualGoalsForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            const newGoals = {};
+            const activityNames = SLOT_KEYS.map(key => (customWorkoutsConfig[key] || DEFAULT_WORKOUT_CONFIG_MAP[key]).name);
+
+            activityNames.forEach(activityName => {
+                const inputElement = e.target.elements[activityName];
+                const value = parseInt(inputElement.value) || 0;
+                newGoals[activityName] = Math.max(0, value);
+            });
+
+            annualGoals = newGoals;
+            saveData(LS_KEY_GOALS_ANNUAL, annualGoals);
+            
+            renderAnnualGoalInputs(); // Atualiza UI com novos valores
+            loadWorkoutsHistory(); // Re-renderiza estatísticas
+
+            showMessage('✅ Metas anuais salvas com sucesso!');
+        });
+        
+        /**
+         * Renderiza os campos de entrada para as metas anuais.
+         */
+        function renderAnnualGoalInputs() {
+            annualGoalsInputsContainer.innerHTML = '';
+             // Usa os nomes customizados
+            const activityNames = SLOT_KEYS.map(key => (customWorkoutsConfig[key] || DEFAULT_WORKOUT_CONFIG_MAP[key]).name);
+
+            activityNames.forEach(activityName => {
+                const goal = annualGoals[activityName] || 0;
+                const inputWrapper = document.createElement('div');
+                inputWrapper.className = 'flex flex-col';
+                inputWrapper.innerHTML = `
+                    <label for="annual-goal-${activityName.replace(/\s/g, '-')}" class="text-sm font-medium text-gray-400 mb-1">${activityName}</label>
+                    <input type="number" id="annual-goal-${activityName.replace(/\s/g, '-')}" name="${activityName}" value="${goal}" min="0" 
+                           class="w-full bg-slate-700 border-slate-600 text-white rounded-xl p-3 text-lg focus:ring-fuchsia-500 focus:border-fuchsia-500 transition duration-150" required>
+                `;
+                annualGoalsInputsContainer.appendChild(inputWrapper);
+            });
+            updateAnnualGoalDisplay();
+        }
+
+        /**
+         * Calcula a soma de todas as metas anuais individuais.
+         */
+        function calculateAnnualGoalTotal() {
+            return Object.values(annualGoals).reduce((sum, goal) => sum + (parseInt(goal) || 0), 0);
+        }
+        
+        /**
+         * Atualiza os elementos de exibição da meta anual total.
+         */
+        function updateAnnualGoalDisplay() {
+            const total = calculateAnnualGoalTotal();
+            const displayValue = total === 0 ? '0' : total.toLocaleString('pt-BR');
+            
+            annualGoalTotalDisplay.textContent = displayValue; // Aba Agenda
+            annualGoalTotalStat.textContent = displayValue;     // Aba Progresso
+        }
+
+
+        // --- LÓGICA DE TREINOS (Ajustada para LocalStorage) ---
+
+        /**
+         * Adiciona um registro de treino ao localStorage.
+         */
+        function logWorkoutLocal(activityName, exercises) {
+            const selectedDateStr = dateInput.value;
+            if (!selectedDateStr) {
+                 showMessage('❌ Por favor, selecione uma data válida para o treino.', 'error');
+                return;
+            }
+            
+            // Cria um ID único baseado no timestamp atual
+            const newId = Date.now().toString(); 
+            const workoutDate = new Date(selectedDateStr + 'T12:00:00'); 
+
+            const newWorkout = {
+                id: newId,
+                activityName: activityName, 
+                exercises: exercises,       
+                logTimestamp: new Date().toISOString(), 
+                workoutDate: workoutDate.toISOString(), // Salva como string ISO para consistência
+                dateString: selectedDateStr 
+            };
+
+            globalWorkoutsData.push(newWorkout);
+            saveData(LS_KEY_WORKOUTS, globalWorkoutsData);
+
+            // Re-renderiza tudo que depende dos dados globais
+            loadWorkoutsHistory();
+            showMessage(`✅ Treino "${activityName}" registrado para ${formatDateTime(workoutDate).date} com sucesso!`);
+        }
+        
+        /**
+         * Remove um registro de treino do localStorage.
+         */
+        function deleteWorkoutLocal(id) {
+            
+            // Filtra a lista, mantendo apenas os que não têm o ID
+            globalWorkoutsData = globalWorkoutsData.filter(workout => workout.id !== id);
+            
+            saveData(LS_KEY_WORKOUTS, globalWorkoutsData);
+            
+            // Re-renderiza a UI
+            loadWorkoutsHistory();
+            showMessage('🗑️ Treino removido com sucesso!', 'success');
+        }
+
+        /**
+         * Renderiza o histórico de treinos na aba 'Progresso'.
+         */
+        function renderHistory(workouts) {
+            historyContainer.innerHTML = '';
+            
+            if (workouts.length === 0) {
+                emptyState.classList.remove('hidden');
+                historyContainer.appendChild(emptyState);
+                return;
+            }
+            emptyState.classList.add('hidden');
+            
+            // Mostra apenas os 10 mais recentes
+            workouts.slice(0, 10).forEach(workout => {
+                const date = new Date(workout.dateString + 'T12:00:00'); 
+                const indicator = getWorkoutIndicator(workout.activityName);
+                const color = indicator ? COLOR_MAP[indicator.slot.replace('slot', 'slot')] : COLOR_MAP['indigo'];
+
+                const item = document.createElement('div');
+                item.className = 'bg-slate-700 p-4 rounded-xl flex justify-between items-center shadow-md border-l-4 border-indigo-400/80';
+                item.style.borderColor = color.text.replace('text-', '#');
+
+                item.innerHTML = `
+                    <div class="flex flex-col">
+                        <span class="text-lg font-bold text-white">${workout.activityName}</span>
+                        <span class="text-sm text-gray-400">${formatDateTime(date).date} - ${workout.exercises.split(',')[0].trim()}...</span>
+                    </div>
+                    <button data-id="${workout.id}" class="delete-history-btn text-red-400 hover:text-red-500 p-2 rounded-full hover:bg-slate-600 transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
+                          <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 10-2 0v6a1 1 0 102 0V8z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                `;
+                historyContainer.appendChild(item);
+            });
+            
+            // Adiciona listeners para exclusão
+            document.querySelectorAll('.delete-history-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    exerciseToDeleteId = e.currentTarget.dataset.id;
+                    showConfirmModal();
+                });
+            });
+        }
+        
+        // --- LÓGICA DE RECOMENDAÇÃO (INALTERADA) ---
+        
+        function getNextWorkout(workouts) {
+            if (!workouts || workouts.length === 0) {
+                return { recommendation: (customWorkoutsConfig.slot1 || DEFAULT_WORKOUT_CONFIG_MAP.slot1).name, lastActivity: 'Nenhum', lastDate: 'Inicie o Ciclo' };
+            }
+
+            const cycleNames = SLOT_KEYS.slice(0, 3).map(key => (customWorkoutsConfig[key] || DEFAULT_WORKOUT_CONFIG_MAP[key]).name);
+
+            const cycleWorkouts = workouts.filter(w => cycleNames.includes(w.activityName))
+                // Converta a string ISO de volta para Date para ordenar
+                .sort((a, b) => new Date(b.dateString).getTime() - new Date(a.dateString).getTime()); 
+
+            if (cycleWorkouts.length === 0) {
+                 // Se houver treinos, mas nenhum no ciclo, pegue o mais recente para info
+                 const latestWorkout = [...workouts].sort((a, b) => new Date(b.dateString).getTime() - new Date(a.dateString).getTime())[0];
+                 return { recommendation: cycleNames[0], lastActivity: latestWorkout.activityName, lastDate: formatDateTime(new Date(latestWorkout.dateString)).date };
+            }
+
+            const latestCycleWorkout = cycleWorkouts[0];
+            
+            const lastActivityName = latestCycleWorkout.activityName;
+            const lastDate = formatDateTime(new Date(latestCycleWorkout.dateString)).date;
+            
+            let recommendation = cycleNames[0]; 
+            const lastIndex = cycleNames.indexOf(lastActivityName);
+            
+            if (lastIndex !== -1) {
+                const nextIndex = (lastIndex + 1) % cycleNames.length;
+                recommendation = cycleNames[nextIndex];
+            } else {
+                 recommendation = cycleNames[0];
+            }
+            
+            return {
+                recommendation: recommendation,
+                lastActivity: lastActivityName,
+                lastDate: lastDate
+            };
+        }
+
+        function renderNextWorkout(workouts) {
+            const recommendationData = getNextWorkout(workouts);
+
+            nextWorkoutDisplay.textContent = recommendationData.recommendation;
+            lastWorkoutInfo.textContent = `Último registro de Ciclo: ${recommendationData.lastActivity} (${recommendationData.lastDate})`;
+        }
+        
+        // --- LÓGICA DO CALENDÁRIO (INALTERADA) ---
+
+        function getWorkoutIndicator(activityName) {
+            const slot = SLOT_KEYS.find(key => (customWorkoutsConfig[key] || DEFAULT_WORKOUT_CONFIG_MAP[key]).name === activityName);
+            if (!slot) return null;
+            
+            const config = customWorkoutsConfig[slot] || DEFAULT_WORKOUT_CONFIG_MAP[slot];
+            const colorData = COLOR_MAP[config.colorKey] || COLOR_MAP['indigo'];
+            
+            const isDot = SLOT_KEYS.indexOf(slot) < 3; 
+
+            return { 
+                color: isDot ? colorData.progress : colorData.text.replace('text-', 'bg-'), 
+                emoji: config.emoji, 
+                isDot: isDot,
+                slot: slot
+            };
+        }
+        
+        function renderCalendar(allWorkouts) {
+            if (!calendarGrid) return;
+            
+            const workoutMap = allWorkouts.reduce((acc, workout) => {
+                const dateKey = workout.dateString;
+                if (dateKey) {
+                    if (!acc[dateKey]) {
+                        acc[dateKey] = new Set();
+                    }
+                    acc[dateKey].add(workout.activityName);
+                }
+                return acc;
+            }, {});
+
+            const date = currentCalendarDate;
+            const year = date.getFullYear();
+            const month = date.getMonth();
+            
+            currentMonthYearSpan.textContent = `${MONTH_NAMES[month]} ${year}`;
+            calendarGrid.innerHTML = '';
+
+            DAY_NAMES_SHORT.forEach(day => {
+                const dayHeader = document.createElement('div');
+                dayHeader.className = 'text-sm font-bold text-indigo-400 p-2'; 
+                dayHeader.textContent = day; // Adiciona o texto do dia da semana
+                calendarGrid.appendChild(dayHeader);
+            });
+
+            const firstDayOfMonth = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const todayString = new Date().toISOString().split('T')[0];
+            
+            let currentDay = 1;
+
+            for (let i = 0; i < 42; i++) {
+                const cellWrapper = document.createElement('div');
+                cellWrapper.className = 'calendar-cell bg-slate-700/50 hover:bg-slate-700/80 transition duration-150 cursor-pointer'; 
+                
+                const numSpan = document.createElement('span');
+                numSpan.className = 'day-number text-gray-200 w-full flex justify-center';
+                
+                const indicatorDiv = document.createElement('div');
+                indicatorDiv.className = 'flex justify-center flex-wrap gap-1 mb-1 min-h-4';
+
+
+                if (i >= firstDayOfMonth && currentDay <= daysInMonth) {
+                    const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
+                    const activities = workoutMap[dateKey] || new Set();
+                    const isToday = dateKey === todayString;
+                    
+                    if (isToday) {
+                        numSpan.innerHTML = `<span class="is-today">${currentDay}</span>`;
+                        cellWrapper.classList.add('border-2', 'border-indigo-500'); 
+                    } else if (activities.size > 0) {
+                        numSpan.textContent = currentDay;
+                        cellWrapper.classList.add('bg-slate-700'); 
+                    } else {
+                        numSpan.textContent = currentDay;
+                    }
+                    
+                    activities.forEach(activityName => {
+                        const indicatorData = getWorkoutIndicator(activityName);
+                        if (indicatorData) {
+                            const indicator = document.createElement('div');
+                            if (indicatorData.isDot) {
+                                indicator.className = `w-2 h-2 rounded-full ${indicatorData.color}`;
+                            } else {
+                                indicator.className = `text-xs leading-none`;
+                                indicator.textContent = indicatorData.emoji;
+                            }
+                            indicatorDiv.appendChild(indicator);
+                        }
+                    });
+
+                    currentDay++; 
+                } else {
+                    cellWrapper.classList.remove('hover:bg-slate-700/80', 'cursor-pointer', 'bg-slate-700/50');
+                    cellWrapper.classList.add('bg-slate-900', 'opacity-50');
+                }
+                
+                cellWrapper.appendChild(numSpan);
+                cellWrapper.appendChild(indicatorDiv);
+                calendarGrid.appendChild(cellWrapper);
+            }
+        }
+        
+        prevMonthButton.addEventListener('click', () => {
+            currentCalendarDate = new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth() - 1, 1);
+            renderCalendar(globalWorkoutsData);
+        });
+
+        nextMonthButton.addEventListener('click', () => {
+            currentCalendarDate = new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth() + 1, 1);
+            renderCalendar(globalWorkoutsData);
+        });
+
+        // --- LÓGICA DE ESTATÍSTICAS (INALTERADA) ---
+        
+        function renderStats(workouts) {
+            statsContainer.innerHTML = '';
+            
+            if (workouts.length === 0) {
+                annualCountSpan.textContent = '0';
+                statsContainer.innerHTML = '<p class="text-center text-gray-500 italic">Nenhum dado para calcular.</p>';
+                return;
+            }
+
+            const now = new Date();
+            const oneYearAgo = new Date(now.setFullYear(now.getFullYear() - 1)).toISOString().split('T')[0];
+            
+            // 1. Filtrar treinos do último ano e contar
+            const annualWorkouts = workouts.filter(w => w.dateString >= oneYearAgo);
+            annualCountSpan.textContent = annualWorkouts.length.toLocaleString('pt-BR');
+
+            // 2. Contar por Tipo de Atividade
+            const counts = annualWorkouts.reduce((acc, workout) => {
+                acc[workout.activityName] = (acc[workout.activityName] || 0) + 1;
+                return acc;
+            }, {});
+
+            const sortedCounts = Object.entries(counts).sort(([, countA], [, countB]) => countB - countA);
+
+            // 3. Renderizar Barras de Progresso
+            const statsHtml = sortedCounts.map(([name, count]) => {
+                const totalGoal = annualGoals[name] || 0;
+                const percentage = totalGoal > 0 ? Math.min(100, (count / totalGoal) * 100) : 0;
+                const displayPercentage = totalGoal > 0 ? `${percentage.toFixed(0)}%` : 'N/A';
+                
+                const slot = SLOT_KEYS.find(key => (customWorkoutsConfig[key] || DEFAULT_WORKOUT_CONFIG_MAP[key]).name === name);
+                const colorData = COLOR_MAP[(customWorkoutsConfig[slot] || DEFAULT_WORKOUT_CONFIG_MAP[slot]).colorKey] || COLOR_MAP['indigo'];
+
+                return `
+                    <div class="space-y-1">
+                        <div class="flex justify-between items-center text-sm font-medium">
+                            <span class="${colorData.text} flex items-center">
+                                ${(customWorkoutsConfig[slot] || DEFAULT_WORKOUT_CONFIG_MAP[slot]).emoji} ${name}
+                            </span>
+                            <span class="text-gray-300">${count} / ${totalGoal}</span>
+                        </div>
+                        <div class="w-full bg-slate-700 rounded-full h-2.5">
+                            <div class="h-2.5 rounded-full ${colorData.progress}" style="width: ${percentage}%"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            statsContainer.innerHTML = statsHtml;
+        }
+
+        // --- LÓGICA DO MODAL DE EXCLUSÃO (NOVO) ---
+        
+        function showConfirmModal() {
+            confirmModal.classList.add('open');
+        }
+
+        function hideConfirmModal() {
+            confirmModal.classList.remove('open');
+            exerciseToDeleteId = null; // Limpa o ID temporário
+        }
+
+        confirmDeleteBtn.addEventListener('click', () => {
+            if (exerciseToDeleteId) {
+                deleteWorkoutLocal(exerciseToDeleteId);
+                hideConfirmModal();
+            }
+        });
+
+        cancelDeleteBtn.addEventListener('click', hideConfirmModal);
+
+        confirmModal.addEventListener('click', (e) => {
+            if (e.target === confirmModal) {
+                hideConfirmModal();
+            }
+        });
+
+        // --- INICIALIZAÇÃO ---
+        window.onload = function() {
+            initLocalApp();
+        };
+
+    </script>
+</body>
+</html>
+
