@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -54,36 +54,52 @@
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
         }
 
-        /* Estilos da Célula do Calendário */
+        /* --- ALTERAÇÕES DO CALENDÁRIO --- */
+        
+        /* Estilos da Célula do Calendário: Altura reduzida e alinhamento otimizado */
         .calendar-cell {
             width: 100%;
-            height: 68px; /* Altura generosa para mobile */
+            height: 50px; /* Altura reduzida para mais compacidade */
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: space-between;
-            padding: 4px;
-            border-radius: 12px;
+            /* Alinha os itens ao topo para economizar espaço vertical */
+            justify-content: flex-start; 
+            padding: 2px 0; /* Menos padding vertical */
+            border-radius: 8px; /* Borda levemente menor */
             transition: background-color 0.2s;
         }
+        
         #calendar-grid {
             display: grid;
             grid-template-columns: repeat(7, 1fr);
-            gap: 4px;
+            gap: 2px; /* Gap reduzido */
             text-align: center;
         }
-        /* Destaque para o número do dia (top da célula) */
+        
+        /* Destaque para o número do dia */
         .day-number {
-            font-size: 0.875rem; /* text-sm */
+            font-size: 0.8rem; /* Ligeiramente menor para caber melhor */
             font-weight: 600;
+            margin-bottom: 2px;
         }
-        /* Destaque para o dia de hoje (AGORA ÍNDIGO NEON) */
+
+        /* Container de Indicadores: Compacto e flexível */
+        .indicator-container {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 2px; /* Espaçamento pequeno entre os indicadores */
+            min-height: 14px;
+        }
+        
+        /* Destaque para o dia de hoje */
         .is-today {
             background-color: #6366F1; /* indigo-500 */
             color: white !important;
             border-radius: 9999px; /* rounded-full */
-            width: 24px;
-            height: 24px;
+            width: 20px; /* Reduzido levemente */
+            height: 20px; /* Reduzido levemente */
             display: flex;
             align-items: center;
             justify-content: center;
@@ -1003,22 +1019,21 @@
             lastWorkoutInfo.textContent = `Último registro de Ciclo: ${recommendationData.lastActivity} (${recommendationData.lastDate})`;
         }
         
-        // --- LÓGICA DO CALENDÁRIO (INALTERADA) ---
+        // --- LÓGICA DO CALENDÁRIO (Células e Indicadores Otimizados) ---
 
+        /**
+         * CORREÇÃO APLICADA AQUI: Retorna apenas o emoji e a cor, removendo a lógica 'isDot'.
+         */
         function getWorkoutIndicator(activityName) {
             // Encontra o slotKey correspondente ao activityName atual
             const slot = SLOT_KEYS.find(key => (customWorkoutsConfig[key] || DEFAULT_WORKOUT_CONFIG_MAP[key]).name === activityName);
             if (!slot) return null; // Retorna null se não encontrar (segurança)
             
             const config = customWorkoutsConfig[slot] || DEFAULT_WORKOUT_CONFIG_MAP[slot];
-            const colorData = COLOR_MAP[config.colorKey] || COLOR_MAP['indigo'];
             
-            const isDot = SLOT_KEYS.indexOf(slot) < 3; // Slots 1, 2, 3 usam ponto (ciclo principal)
-
             return { 
-                color: isDot ? colorData.progress : colorData.text.replace('text-', 'bg-'), 
+                colorKey: config.colorKey, // Passa a chave da cor
                 emoji: config.emoji, 
-                isDot: isDot,
                 slot: slot
             };
         }
@@ -1047,8 +1062,9 @@
 
             DAY_NAMES_SHORT.forEach(day => {
                 const dayHeader = document.createElement('div');
-                dayHeader.className = 'text-sm font-bold text-indigo-400 p-2'; 
-                dayHeader.textContent = day; // Adiciona o texto do dia da semana
+                // Altera o padding para ser mais compacto
+                dayHeader.className = 'text-sm font-bold text-indigo-400 py-2'; 
+                dayHeader.textContent = day; 
                 calendarGrid.appendChild(dayHeader);
             });
 
@@ -1063,10 +1079,12 @@
                 cellWrapper.className = 'calendar-cell bg-slate-700/50 hover:bg-slate-700/80 transition duration-150 cursor-pointer'; 
                 
                 const numSpan = document.createElement('span');
-                numSpan.className = 'day-number text-gray-200 w-full flex justify-center';
+                // Adiciona pt-1 para um pequeno espaçamento no topo
+                numSpan.className = 'day-number text-gray-200 w-full flex justify-center pt-1';
                 
                 const indicatorDiv = document.createElement('div');
-                indicatorDiv.className = 'flex justify-center flex-wrap gap-1 mb-1 min-h-4';
+                // Usa a nova classe para indicadores compactos
+                indicatorDiv.className = 'indicator-container';
 
 
                 if (i >= firstDayOfMonth && currentDay <= daysInMonth) {
@@ -1088,15 +1106,14 @@
                         const indicatorData = getWorkoutIndicator(activityName);
                         if (indicatorData) {
                             const indicator = document.createElement('div');
-                            if (indicatorData.isDot) {
-                                indicator.className = `w-2 h-2 rounded-full ${indicatorData.color}`;
-                            } else {
-                                // Usa a cor do texto para os emojis (não-ciclo)
-                                const colorKey = (customWorkoutsConfig[indicatorData.slot] || DEFAULT_WORKOUT_CONFIG_MAP[indicatorData.slot]).colorKey;
-                                const color = COLOR_MAP[colorKey] || COLOR_MAP['indigo'];
-                                indicator.className = `text-xs leading-none ${color.text}`;
-                                indicator.textContent = indicatorData.emoji;
-                            }
+                            
+                            // *** CORREÇÃO APLICADA AQUI: Sempre renderiza o emoji ***
+                            const color = COLOR_MAP[indicatorData.colorKey] || COLOR_MAP['indigo'];
+                            // text-sm é maior que text-xs, ajudando na renderização do emoji e na legibilidade
+                            indicator.className = `text-sm leading-none ${color.text}`; 
+                            indicator.textContent = indicatorData.emoji;
+                            // *******************************************************
+                            
                             indicatorDiv.appendChild(indicator);
                         }
                     });
@@ -1217,3 +1234,4 @@
     </script>
 </body>
 </html>
+
